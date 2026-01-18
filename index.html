@@ -434,6 +434,12 @@
                         </div>
                 </div>  
 
+                <div class="space-y-1">
+                    <label class="text-[10px] font-bold text-gray-400 uppercase tracking-widest">店家地址或 Google Map 連結</label>
+                    <input id="shop-address" type="text" placeholder="貼上地址或地圖分享網址" 
+                        class="w-full p-3 bg-gray-50 rounded-xl text-sm border-none ring-1 ring-gray-100 focus:ring-accent transition-all outline-none">
+                </div>
+
                 <div class="grid grid-cols-2 gap-3">
                     <select id="shop-attr" class="p-2 bg-gray-50 rounded-lg"><option>食</option><option>衣</option><option>住</option><option>行</option><option>育</option><option>樂</option></select>
                     <input id="shop-cat" type="text" placeholder="子分類" class="p-2 bg-gray-50 rounded-lg">
@@ -800,7 +806,7 @@
             document.getElementById('modal-title').value = event.title;
             document.getElementById('modal-time').value = event.time;
             document.getElementById('modal-type').value = event.type;
-            document.getElementById('modal-map').value = event.map || "";
+            document.getElementById('modal-map').value = event.mapUrl || "";
             document.getElementById('modal-note').value = event.note || "";
             modal.dataset.editingId = eventId;
             modal.classList.remove('hidden');
@@ -813,15 +819,17 @@
             const title = document.getElementById('modal-title').value;
             const time = document.getElementById('modal-time').value;
             const type = document.getElementById('modal-type').value;
+            const mapUrlValue = document.getElementById('modal-map').value;
+            const noteValue = document.getElementById('modal-note').value;
             if (!title) return alert("請輸入標題");
 
             if (editingId) {
                 const event = travelData.events.find(e => e.id === Number(editingId));
                 event.title = title; event.time = time; event.type = type;
-                event.map = document.getElementById('modal-map').value;
-                event.note = document.getElementById('modal-note').value;
+                event.mapUrl = mapUrlValue; 
+                event.note = noteValue;
             } else {
-                travelData.events.push({ id: Date.now(), day: travelData.currentDay, title, time, type, map: document.getElementById('modal-map').value, note: document.getElementById('modal-note').value, expenses: [] });
+                travelData.events.push({ id: Date.now(), day: travelData.currentDay, title, time, type, mapUrl: mapUrlValue, note: noteValue, expenses: [] });
             }
             saveData();
             closeModal();
@@ -853,23 +861,30 @@
             list.innerHTML = '';
             let total = 0;
             const expenses = event.expenses || [];
+            
             expenses.forEach((exp, index) => {
                 total += exp.amount;
                 const methodTag = exp.method === '信用卡' ? '💳 刷卡' : '💵 現金';
+                
                 list.innerHTML += `
-                    <div class="flex justify-between items-center bg-white border p-3 rounded-lg shadow-sm">
+                    <div class="flex justify-between items-center bg-white border p-3 rounded-lg shadow-sm cursor-pointer active:bg-gray-50" 
+                        ondblclick="editExpenseItem(${index})" title="雙擊以編輯">
                         <div>
                             <span class="text-[9px] bg-stone-100 px-1.5 py-0.5 rounded text-gray-500">${exp.type} | ${methodTag}</span>
-                            <div class="font-bold">${exp.name}</div>
+                            <div class="font-bold text-gray-800">${exp.name}</div>
                         </div>
                         <div class="flex items-center space-x-3">
-                            <span class="font-bold">¥ ${exp.amount.toLocaleString()}</span>
-                            <button onclick="deleteExpenseItem(${index})" class="text-gray-300 hover:text-red-500"><i class="fas fa-trash-alt"></i></button>
+                            <span class="font-bold text-accent">¥ ${exp.amount.toLocaleString()}</span>
+                            <button onclick="event.stopPropagation(); deleteExpenseItem(${index})" class="text-gray-300 hover:text-red-500">
+                                <i class="fas fa-trash-alt"></i>
+                            </button>
                         </div>
                     </div>`;
             });
             document.getElementById('expense-total').innerText = `¥ ${total.toLocaleString()}`;
         }
+
+        // 🌟 確保在腳本頂部有定義這個變數：let currentEditExpenseIndex = null;
 
         function addExpenseItem() {
             const name = document.getElementById('new-exp-name').value;
@@ -879,7 +894,6 @@
 
             if (!name || !amount) return alert("請輸入項目名稱與金額");
 
-            // 🌟 修正點：確保從「全域資料」中精準找到該 ID 的行程
             const event = travelData.events.find(e => e.id === Number(currentEditingEventId));
             
             if (!event) {
@@ -889,21 +903,42 @@
 
             if (!event.expenses) event.expenses = [];
 
-            // 新增項目
-            event.expenses.push({ 
-                name: name, 
-                type: type, 
-                amount: Number(amount),
-                method: method
-            });
+            // 🌟 核心修正：判斷是「更新」還是「新增」
+            if (currentEditExpenseIndex !== null) {
+                // 模式 A：更新現有項目
+                event.expenses[currentEditExpenseIndex] = {
+                    name: name,
+                    type: type,
+                    amount: Number(amount),
+                    method: method
+                };
+                // 重置編輯索引
+                currentEditExpenseIndex = null;
+                
+                // 恢復按鈕文字與顏色 (假設按鈕 ID 為 add-exp-btn)
+                const btn = document.querySelector('button[onclick="addExpenseItem()"]');
+                if (btn) {
+                    btn.innerText = "+ 新增項目";
+                    btn.classList.remove('bg-gray-100', 'text-red-500'); // 移除編輯顏色
+                    btn.classList.add('bg-accent', 'text-gray-500');    // 加回原本顏色
+                }
+            } else {
+                // 模式 B：新增項目
+                event.expenses.push({ 
+                    name: name, 
+                    type: type, 
+                    amount: Number(amount),
+                    method: method
+                });
+            }
 
             // 清空輸入框
             document.getElementById('new-exp-name').value = '';
             document.getElementById('new-exp-amount').value = '';
 
             // 儲存並刷新
-            saveAndSync(); 
-            renderExpenseList(event); // 重新畫出該彈窗內的清單
+            saveAndSync(); // 或是您的 saveData()
+            renderExpenseList(event); 
         }
 
         function saveAndSync() {
@@ -922,7 +957,49 @@
             renderEvents();
         }
 
-        function closeExpenseModal() { document.getElementById('expense-modal').classList.replace('flex', 'hidden'); }
+        let currentEditExpenseIndex = null; // 紀錄正在編輯哪一筆
+
+        function editExpenseItem(index) {
+            // 🌟 修正點：使用 currentEditingEventId 查找行程，與你的 addExpenseItem 邏輯一致
+            const event = travelData.events.find(e => e.id === Number(currentEditingEventId));
+            
+            if (!event || !event.expenses || !event.expenses[index]) {
+                console.error("找不到對應的行程或消費紀錄");
+                return;
+            }
+
+            const exp = event.expenses[index];
+
+            // 1. 將資料填回輸入框
+            document.getElementById('new-exp-name').value = exp.name;
+            document.getElementById('new-exp-type').value = exp.type;
+            document.getElementById('new-exp-amount').value = exp.amount;
+            document.getElementById('new-exp-method').value = exp.method;
+
+            // 2. 紀錄目前編輯的是哪一筆索引
+            currentEditExpenseIndex = index;
+
+            // 3. 改變按鈕外觀提醒正在編輯 (假設按鈕沒有 ID，我們用屬性選擇器找它)
+            const btn = document.querySelector('button[onclick="addExpenseItem()"]');
+            if (btn) {
+                btn.innerText = "更新此筆項目";
+                btn.classList.remove('bg-accent', 'text-gray-500'); // 移除原本的顏色
+                btn.classList.add('bg-gray-100', 'text-red-500');   // 換成編輯中的顏色
+            }
+            // 4. 自動捲動到輸入框位置，方便手機操作
+            const modalBody = document.querySelector('.modal-content') || window;
+            modalBody.scrollTo({ top: 0, behavior: 'smooth' });
+        }
+    
+        function closeExpenseModal() { document.getElementById('expense-modal').classList.replace('flex', 'hidden'); 
+            currentEditExpenseIndex = null;
+            const btn = document.querySelector('button[onclick="addExpenseItem()"]');
+            if (btn) {
+                btn.innerText = "+ 新增項目";
+                btn.classList.remove('bg-gray-100', 'text-red-500');
+                btn.classList.add('bg-accent', 'text-gray-500');
+            }
+        }
 
         // --- 統計與計算機 ---
         async function updateLiveRate() {
@@ -1158,13 +1235,53 @@
         let currentAddingUser = "";
 
         // 打開/關閉彈窗
-        function openShopModal(user) {
+        function openShopModal(user, editId = null) {
             currentAddingUser = user;
-            document.getElementById('shop-modal').classList.remove('hidden');
-            setHeart(0);
+
+            // 1. 處理隱藏的 ID (這行很重要，saveShopItem 靠它判斷是編輯還是新增)
+            const editIdInput = document.getElementById('edit-item-id');
+            if (editIdInput) editIdInput.value = editId || '';
+
+            // 2. 清空照片容器
             document.getElementById('photo-input-container').innerHTML = '';
-            addPhotoInput('');
+
+            // 3. 判斷：如果是「編輯模式」 (editId 有值)
+            if (editId) {
+                const item = shoppingData.find(i => i.id == editId);
+                if (item) {
+                    // 填回所有欄位
+                    document.getElementById('shop-item-name').value = item.name || '';
+                    document.getElementById('shop-attr').value = item.attr || '食';
+                    document.getElementById('shop-cat').value = item.cat || '';
+                    document.getElementById('shop-loc').value = item.loc || '大阪';
+                    
+                    // 🌟 填回地址 (就是這行讓你編輯時看得到地址)
+                    const addrInput = document.getElementById('shop-address');
+                    if (addrInput) addrInput.value = item.address || '';
+                    
+                    setHeart(item.heart || 0);
+
+                    // 填回多張照片
+                    if (item.photoUrls && item.photoUrls.length > 0) {
+                        item.photoUrls.forEach(url => addPhotoInput(url));
+                    } else {
+                        addPhotoInput('');
+                    }
+                }
+            } else {
+                // 4. 判斷：如果是「新增模式」 (editId 是空的)
+                document.getElementById('shop-item-name').value = '';
+                document.getElementById('shop-cat').value = '';
+                const addrInput = document.getElementById('shop-address');
+                if (addrInput) addrInput.value = ''; // 清空地址
+                setHeart(0);
+                addPhotoInput('');
+            }
+
+            // 5. 顯示視窗
+            document.getElementById('shop-modal').classList.remove('hidden');
         }
+
         function closeShopModal() {
             document.getElementById('shop-modal').classList.add('hidden');
         }
@@ -1221,7 +1338,7 @@
             const heart = parseInt(document.getElementById('shop-heart')?.value || 0);
             const editIdEl = document.getElementById('edit-item-id');
             const editId = editIdEl ? editIdEl.value : "";
-
+            const address = document.getElementById('shop-address').value;
             // 4. 打包資料
             const itemData = {
                 name: itemName,
@@ -1230,7 +1347,8 @@
                 cat: cat,
                 loc: loc,
                 heart: heart,
-                user: currentAddingUser
+                user: currentAddingUser,
+                address: address
             };
 
             // 5. 判斷新增或更新
@@ -1249,6 +1367,11 @@
 
             // 6. 寫入儲存空間並更新畫面
             localStorage.setItem('travelShopping', JSON.stringify(shoppingData));
+
+            const addressInput = document.getElementById('shop-address');
+            if (addressInput) addressInput.value = '';
+
+            document.getElementById('shop-item-name').value = '';
 
             if (typeof db !== 'undefined') {
                 db.ref('shoppingData').set(shoppingData)
@@ -1321,12 +1444,27 @@
                         <div class="bg-white p-3 rounded-2xl shadow-sm border border-gray-100 mb-3 transition-all ${item.checked ? 'bg-gray-50/50 border-dashed opacity-70' : ''}">
                             ${photoHtml}
                             <div class="flex justify-between items-start mb-2">
-                                <span class="font-bold ${item.checked ? 'text-gray-400 line-through' : 'text-gray-800'}">${item.name}</span>
+                                <div class="flex flex-col">
+                                    <div class="flex items-center gap-2">
+                                        <span class="font-bold ${item.checked ? 'text-gray-400 line-through' : 'text-gray-800'}">${item.name}</span>
+                                        
+                                        ${item.address ? `
+                                            <a href="${item.address.startsWith('http') ? item.address : `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(item.address)}`}" 
+                                            target="_blank" class="text-blue-500 text-xs">
+                                                <i class="fas fa-map-marker-alt"></i>
+                                            </a>
+                                        ` : ''}
+                                    </div>
+                                </div>
+                                
                                 <div class="flex gap-4 items-center">
-                                    <button onclick="openEditShopModal(${item.id})" class="text-gray-300 hover:text-blue-500 text-lg"><i class="fas fa-edit"></i></button>
+                                    <button onclick="openShopModal('${item.user}', ${item.id})" class="text-gray-300 hover:text-blue-500 text-lg">
+                                        <i class="fas fa-edit"></i>
+                                    </button>
                                     <input type="checkbox" onchange="toggleItemCheck(${item.id})" ${item.checked ? 'checked' : ''} class="w-5 h-5 rounded-lg border-gray-300 text-[#8E2B2B]">
                                 </div>
                             </div>
+                            
                             <div class="flex flex-wrap gap-1 ${item.checked ? 'grayscale opacity-50' : ''}">
                                 <span class="text-[9px] bg-blue-50 text-blue-500 px-1.5 py-0.5 rounded">📍 ${item.loc}</span>
                                 <span class="text-[9px] bg-orange-50 text-orange-500 px-1.5 py-0.5 rounded">🏷️ ${item.cat}</span>
