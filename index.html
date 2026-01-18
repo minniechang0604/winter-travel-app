@@ -1,0 +1,1484 @@
+
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Sortable/1.15.0/Sortable.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <title>Winter Journey Planner</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Noto+Serif+TC:wght@400;700&display=swap');
+        :root { --paper: #F9F7F2; --accent: #8E2B2B; --gold: #B59F7A; }
+        body { background-color: var(--paper); font-family: 'Noto Serif TC', serif; color: #2D2D2D; overflow-x: hidden; }
+        .main-section.hidden, 
+        .hidden {
+            display: none !important;
+            visibility: hidden !important;
+            height: 0 !important;
+            overflow: hidden !important;
+        }
+        .timeline-line::before {
+            content: ''; position: absolute; left: 19px; top: 0; bottom: 0; width: 1px;
+            background: repeating-linear-gradient(to bottom, var(--gold) 0, var(--gold) 4px, transparent 4px, transparent 8px);
+        }
+        .tab-active { color: var(--accent) !important; border-bottom: 2px solid var(--accent) !important; font-weight: bold; }
+        .sortable-ghost { opacity: 0.3; background: #e2e2e2; }
+        .op-active {background-color: white !important;color: #8E2B2B !important;}
+        .scrollbar-hide::-webkit-scrollbar {display: none;}
+        .scrollbar-hide {
+            -ms-overflow-style: none;  /* IE and Edge */
+            scrollbar-width: none;  /* Firefox */}
+        #hourly-forecast {
+            display: flex !important;
+            flex-wrap: nowrap;
+            -webkit-overflow-scrolling: touch;
+        }
+        #hourly-forecast > div {
+            flex-shrink: 0; /* 防止小時資訊被壓縮 */
+        }
+        /* 🛍️ 購物清單彈窗 - 愛心互動區優化 */
+        .heart-emoji-btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 32px; /* 稍微縮小一點點，確保不擠壓 */
+            height: 32px;
+            cursor: pointer;
+            font-size: 1.5rem; /* 約 24px */
+            line-height: 1;
+            transition: transform 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+            user-select: none;
+        }
+        .heart-emoji-btn:active {transform: scale(0.8);}
+        .heart-active {
+            transform: scale(1.1); /* 不要放太大，避免破框 */
+            filter: drop-shadow(0 2px 4px rgba(251, 113, 133, 0.2));}
+        #heart-tag {
+            white-space: nowrap;
+            min-width: 45px;
+            text-align: center;
+        }
+        /* 讓多圖橫向滑動時隱藏滾動條但保留功能 */
+        .no-scrollbar::-webkit-scrollbar {display: none;}
+        .no-scrollbar {
+            -ms-overflow-style: none;
+            scrollbar-width: none;
+        }
+        /* 將這段貼在 <style> 標籤內 */
+        .header-container::before {
+            content: "";
+            position: absolute;
+            top: 0; left: 0; width: 100%; height: 100%;
+            
+            /* 🌟 在這裡貼上你的照片網址 */
+            background-image: linear-gradient(to bottom, rgba(255,255,255,0.4), rgba(255,255,255,0.7)), 
+                            url('https://banbi.tw/wp-content/uploads/20230224042032_12.jpg');
+                            
+            background-size: cover;
+            background-position: center;
+            filter: blur(0px); /* 這裡控制模糊程度 */
+            transform: scale(1.1); /* 放大一點點避免邊緣白邊 */
+            z-index: 0;
+        }
+        
+    </style>
+</head>
+<body class="pb-24">
+    <header class="header-container relative flex h-80 flex-col justify-between p-5 text-gray-800 overflow-hidden">    
+        <div class="w-full pt-2 relative z-10">
+            <p class="text-[15px] tracking-tight opacity-90 font-bold whitespace-nowrap">
+                2026.02.10-02.19 <span class="mx-2 text-gray-800">|</span> <span class="italic text-gold">關西之旅</span>
+            </p>
+        </div>
+
+        <div class="flex items-end justify-between w-full pb-2 relative z-10">
+            
+            <div class="w-1/2 space-y-1">
+                <h1 id="header-time" class="text-5xl font-bold leading-tight">--:--</h1>
+                
+                <div class="group flex items-center w-full">
+                    <input id="day-headline" type="text" value="標題" 
+                        onblur="saveHeadlineExplicit(this.value)"
+                        class="bg-transparent border-none text-2xl tracking-tight font-bold outline-none w-full focus:ring-0 p-0"
+                        placeholder="輸入主題">
+                </div>
+
+                <div id="header-location-box" class="flex items-center pt-1">
+                    <a id="header-map-link" href="#" target="_blank" class="flex items-center space-x-1 bg-white/20 backdrop-blur-md px-3 py-1.5 rounded-full border border-white/30 active:scale-95 transition-transform max-w-full overflow-hidden">
+                        <i class="fas fa-location-dot text-accent text-[10px]"></i>
+                        <span id="header-location-name" class="text-[11px] font-medium truncate">地標</span>
+                    </a>
+                    <button onclick="editHeaderMap()" class="ml-1 text-[10px] opacity-40"><i class="fas fa-edit"></i></button>
+                </div>
+            </div>
+
+            <div class="w-1/2 rounded-2xl border border-white/20 bg-white/10 p-3 backdrop-blur-md shrink-0 ml-3">
+                <div class="flex justify-between items-center mb-1.5">
+                    <div class="flex items-center gap-1">
+                        <div id="weather-icon-container" class="scale-90 origin-left"></div>
+                        <div>
+                            <p id="header-temp" class="text-2xl font-bold leading-none">--°</p>
+                            <p id="feels-like" class="text-[9px] text-white/60">體感 --°</p>
+                        </div>
+                    </div>
+                    <div class="text-right">
+                        <p id="rain-chance" class="text-blue-300 font-bold text-[10px]"><i class="fas fa-umbrella mr-0.5"></i>--%</p>
+                        <p id="location-city" class="text-[8px] text-white/40 uppercase tracking-widest">OSAKA</p>
+                    </div>
+                </div>
+                
+                <div id="hourly-forecast" class="flex gap-2 overflow-x-auto pb-1 scrollbar-hide border-t border-white/10 pt-1.5 text-center">
+                    <div class="text-[10px] text-white/30">Loading...</div>
+                </div>
+            </div>
+
+        </div>
+    </header>
+
+    <nav id="date-nav" class="flex overflow-x-auto p-4 space-x-3 no-scrollbar bg-white shadow-sm sticky top-0 z-40"></nav>
+
+    <div class="flex p-4 space-x-2 bg-white/50 border-b border-gray-100">
+        <button onclick="changeTotalDays(1)" class="text-xs border border-accent text-accent px-3 py-1 rounded">+ 新增天數</button>
+        <button onclick="changeTotalDays(-1)" class="text-xs border border-gray-300 text-gray-400 px-3 py-1 rounded">- 減少天數</button>
+        <input type="date" onchange="updateStartDate(this.value)" class="text-xs border border-gray-300 p-1 rounded ml-auto">
+    </div>
+
+    <div class="flex justify-around border-b border-gray-100 bg-white text-sm font-medium sticky top-[72px] z-40">
+        <button onclick="switchMainTab('itinerary')" class="tab-active px-6 py-3" id="btn-itinerary">行程表</button>
+        <button onclick="switchMainTab('accounting')" class="px-6 py-3 text-gray-400" id="btn-accounting">記帳本</button>
+        <button onclick="switchMainTab('shopping')" class="px-6 py-3 text-gray-400" id="btn-shopping">購物清單</button>
+    </div>
+
+    <main class="p-4">
+        <section id="section-itinerary" class="main-section timeline-line relative space-y-6 pl-10">
+            <div id="drag-container"></div>
+            <div class="border-t border-dashed border-gray-300 pt-4">
+                <p class="text-[10px] tracking-widest text-gray-400 uppercase">Daily Expense</p>
+                <p id="total-expense" class="text-accent mt-1 font-serif text-3xl font-bold">¥ 0</p>
+            </div>
+        </section>
+
+        <section id="section-accounting" class="main-section hidden px-4 pt-4 pb-24 space-y-6">
+            <div class="bg-black text-white p-6 rounded-3xl shadow-xl">
+                <p class="text-xs text-gray-400 uppercase tracking-widest mb-1">Total Trip Expense</p>
+                <h2 id="stats-total" class="text-4xl font-serif font-bold text-[#B59F7A]">¥ 0</h2>
+                <div class="mt-4 grid grid-cols-2 gap-4 border-t border-gray-800 pt-4">
+                    <div>
+                        <p class="text-[10px] text-gray-500 uppercase">💵 現金合計</p>
+                        <p id="stats-cash" class="font-bold text-green-400">¥ 0</p>
+                    </div>
+                    <div>
+                        <p class="text-[10px] text-gray-500 uppercase">💳 刷卡合計</p>
+                        <p id="stats-card" class="font-bold text-blue-400">¥ 0</p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="bg-white p-6 rounded-3xl shadow-sm border border-gray-100">
+                <h3 class="flex items-center text-gray-800 mb-4">
+                    <i class="fas fa-chart-pie mr-2 text-accent text-2xl"></i> 
+                    <span class="text-xl font-bold tracking-tight">分類花費分布</span>
+                </h3>
+                
+                <div class="relative h-48 w-full">
+                    <canvas id="categoryChart"></canvas>
+                </div>
+            </div>
+
+            <div class="bg-white rounded-3xl shadow-sm border border-gray-100 overflow-hidden">
+                <button onclick="toggleExpenseList()" class="w-full px-6 py-4 flex justify-between items-center hover:bg-gray-50 transition-colors">
+                    <h3 class="text-sm font-bold flex items-center">
+                        <i class="fas fa-list-ul mr-2 text-xl"></i> 消費明細總覽
+                    </h3>
+                    <i id="expense-list-arrow" class="fas fa-chevron-down text-gray-400 transition-transform"></i>
+                </button>
+                
+                <div id="full-expense-list-container" class="hidden border-t border-gray-50 max-h-[400px] overflow-y-auto">
+                    <table class="w-full text-left text-sm">
+                        <thead class="bg-stone-50 text-[12px] text-gray-400 uppercase sticky top-0">
+                            <tr>
+                                <th class="px-6 py-2">日期/項目</th>
+                                <th class="px-6 py-2">方式</th>
+                                <th class="px-6 py-2 text-right">金額</th>
+                            </tr>
+                        </thead>
+                        <tbody id="full-expense-list-body">
+                            </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <button onclick="toggleCalc()" class="w-full bg-stone-100 text-stone-600 py-4 rounded-2xl font-bold flex items-center justify-center space-x-2 active:scale-95 transition-transform">
+                <i class="fas fa-calculator"></i>
+                <span>開啟匯率計算機</span>
+            </button>
+        </section>
+
+        <section id="section-shopping" class="hidden p-4 space-y-6">
+            <div class="sticky top-0 z-10 bg-white/80 backdrop-blur-md p-4 rounded-2xl shadow-sm border border-gray-100">
+                <p class="text-[10px] text-gray-400 font-bold mb-2 uppercase tracking-widest">Quick Filter 快速篩選</p>
+                
+                <div class="flex flex-col gap-3">
+                    <div class="flex flex-wrap gap-2">
+                        <button onclick="filterShopping('ALL')" class="px-3 py-1 bg-[#8E2B2B] text-white rounded-full text-xs font-bold">全部</button>
+                        <button onclick="filterShopping('❤️❤️❤️')" class="px-3 py-1 bg-pink-50 text-pink-500 rounded-full text-xs">🔥 必買</button>
+                    </div>
+
+                    <div class="flex gap-2">
+                        <select id="filter-cat" onchange="filterShopping(this.value)" class="flex-1 p-2 bg-gray-100 rounded-xl text-xs border-none ring-1 ring-gray-200">
+                            <option value="ALL">🔍 所有子分類</option>
+                        </select>
+                        <select id="filter-loc" onchange="filterShopping(this.value)" class="flex-1 p-2 bg-gray-100 rounded-xl text-xs border-none ring-1 ring-gray-200">
+                            <option value="ALL">📍 所有地點</option>
+                            <option value="神戶">神戶</option>
+                            <option value="大阪">大阪</option>
+                            <option value="京都">京都</option>
+                            <option value="天橋立">天橋立</option>
+                            <option value="伊根舟屋">伊根舟屋</option>
+                            <option value="城崎溫泉">城崎溫泉</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+
+            <h3 class="text-lg font-bold mb-4 flex items-center justify-between">
+                <div class="flex items-center gap-2">
+                    <span>👤 育薰</span>
+                    <button onclick="toggleUserList('User A')" class="text-gray-400 hover:text-accent transition-colors">
+                        <i id="eye-User A" class="fas fa-eye"></i>
+                    </button>
+                </div>
+                <button onclick="openShopModal('User A')" class="text-accent"><i class="fas fa-plus-circle"></i></button>
+            </h3>
+            <div id="shop-list-A" class="space-y-3"></div>
+
+            <h3 class="text-lg font-bold mb-4 flex items-center justify-between">
+                <div class="flex items-center gap-2">
+                    <span>👤 美妮</span>
+                    <button onclick="toggleUserList('User B')" class="text-gray-400 hover:text-accent">
+                        <i id="eye-User B" class="fas fa-eye"></i>
+                    </button>
+                </div>
+                <button onclick="openShopModal('User B')" class="text-accent"><i class="fas fa-plus-circle"></i></button>
+            </h3>
+            <div id="shop-list-B" class="space-y-3"></div>
+
+            <h3 class="text-lg font-bold mb-4 flex items-center justify-between">
+                <div class="flex items-center gap-2">
+                    <span>👤 美儀</span>
+                    <button onclick="toggleUserList('User C')" class="text-gray-400 hover:text-accent">
+                        <i id="eye-User C" class="fas fa-eye"></i>
+                    </button>
+                </div>
+                <button onclick="openShopModal('User C')" class="text-accent"><i class="fas fa-plus-circle"></i></button>
+            </h3>
+            <div id="shop-list-C" class="space-y-3"></div>
+        </section>
+
+        
+    </main>
+
+    <div class="fixed right-6 bottom-6 z-50">
+        <button onclick="openAddModal()" class="bg-accent flex h-14 w-14 items-center justify-center rounded-full text-2xl text-white shadow-2xl transition-transform active:scale-90">
+            <i class="fas fa-plus"></i>
+        </button>
+    </div>
+
+    <div class="p-4 flex gap-2">
+        <button onclick="exportData()" class="bg-blue-500 text-white px-4 py-2 rounded">匯出備份檔</button>
+        <button onclick="importData()" class="bg-green-500 text-white px-4 py-2 rounded">匯入備份檔</button>
+    </div>
+
+    
+
+    <div id="edit-modal" class="fixed inset-0 z-[100] hidden items-end justify-center bg-black/60 backdrop-blur-sm sm:items-center">
+        <div class="w-full max-w-lg rounded-t-3xl bg-white p-6 sm:rounded-3xl">
+            <div class="mb-6 flex items-center justify-between">
+                <h2 class="border-accent border-l-4 pl-2 text-xl font-bold">行程編輯</h2>
+                <button onclick="closeModal()" class="text-gray-400"><i class="fas fa-times text-xl"></i></button>
+            </div>
+            <form class="space-y-4" onsubmit="event.preventDefault();">
+                <div class="flex space-x-4">
+                    <div class="flex-1">
+                        <label class="block text-[10px] text-gray-400 uppercase">時間</label>
+                        <input id="modal-time" type="time" class="w-full border-b border-gray-200 py-2 text-lg outline-none">
+                    </div>
+                    <div class="flex-1">
+                        <label class="block text-[10px] text-gray-400 uppercase">分類</label>
+                        <select id="modal-type" class="w-full border-b border-gray-200 py-2 outline-none">
+                            <option>午餐</option><option>晚餐</option><option>景點</option><option>交通</option><option>購物逛街</option><option>超市</option><option>溫泉</option><option>旅館</option><option>彈性</option>
+                        </select>
+                    </div>
+                </div>
+                <div>
+                    <label class="block text-[10px] text-gray-400 uppercase">標題</label>
+                    <input type="text" id="modal-title" class="w-full border-b border-gray-200 py-2 text-lg outline-none font-bold" placeholder="輸入名稱">
+                </div>
+                <div>
+                    <label class="block text-[10px] text-gray-400 uppercase">地圖連結</label>
+                    <input type="text" id="modal-map" class="w-full border-b border-gray-200 py-2 text-sm outline-none" placeholder="Google Maps URL">
+                </div>
+                <div>
+                    <label class="block text-[10px] text-gray-400 uppercase">備註</label>
+                    <textarea id="modal-note" rows="3" class="w-full bg-stone-50 rounded-xl p-3 text-sm mt-1 outline-none"></textarea>
+                </div>
+                <div class="grid grid-cols-2 gap-4 pt-4">
+                    <button type="button" onclick="deleteEvent()" class="border border-gray-300 py-4 rounded-xl text-gray-500 font-bold">刪除</button>
+                    <button type="button" onclick="updateEvent()" class="bg-black text-white py-4 rounded-xl font-bold shadow-lg">保存</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <div id="expense-modal" class="fixed inset-0 z-[110] hidden items-end justify-center bg-black/60 backdrop-blur-sm sm:items-center">
+        <div class="w-full max-w-lg rounded-t-3xl bg-white p-6 sm:rounded-3xl">
+            <div class="mb-4 flex items-center justify-between">
+                <h2 class="border-accent border-l-4 pl-2 text-xl font-bold">消費明細</h2>
+                <button onclick="closeExpenseModal()" class="text-gray-400"><i class="fas fa-times text-xl"></i></button>
+            </div>
+            <div id="expense-list" class="space-y-3 max-h-[30vh] overflow-y-auto no-scrollbar mb-4"></div>
+            <div class="bg-stone-50 p-4 rounded-xl space-y-3 border border-gray-100">
+                <input id="new-exp-name" type="text" placeholder="項目名稱" class="w-full bg-white border border-gray-200 rounded-lg p-3 text-sm outline-none focus:border-accent">
+                <div class="grid grid-cols-3 gap-2">
+                    <select id="new-exp-type" class="bg-white border border-gray-200 rounded-lg p-2 text-xs outline-none">
+                        <option>飲食</option><option>交通門票</option><option>購物</option><option>住宿</option>
+                    </select>
+                    <select id="new-exp-method" class="bg-white border border-gray-200 rounded-lg p-2 text-xs outline-none text-accent font-bold">
+                        <option value="現金">💵 現金</option><option value="信用卡">💳 刷卡</option>
+                    </select>
+                    <input id="new-exp-amount" type="number" placeholder="¥" class="bg-white border border-gray-200 rounded-lg p-2 text-xs outline-none">
+                </div>
+                <button onclick="addExpenseItem()" class="w-full bg-accent text-gray-500 py-3 rounded-xl text-sm font-bold shadow-md active:scale-95 transition-transform">+ 新增項目</button>
+            </div>
+            <div class="mt-4 flex justify-between items-center px-2">
+                <span class="text-gray-500 text-xs font-bold uppercase">Total JPY</span>
+                <span id="expense-total" class="text-accent text-3xl font-serif font-bold">¥ 0</span>
+            </div>
+        </div>
+    </div>
+
+    <div id="calc-modal" class="fixed inset-0 z-[200] hidden items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+        <div class="bg-[#1C1C1E] w-full max-w-xs rounded-[2.5rem] shadow-2xl overflow-hidden border border-white/10">
+            <div class="p-6 text-right space-y-1">
+                <div class="flex justify-between items-center mb-2">
+                    <span id="rate-tag" class="text-[10px] bg-accent/20 text-accent px-2 py-0.5 rounded text-white/50">實時匯率: --</span>
+                    <label class="flex items-center cursor-pointer">
+                        <span class="text-[10px] text-white/50 mr-2">自動換算台幣</span>
+                        <input type="checkbox" id="auto-convert" class="sr-only peer" checked>
+                        <div class="w-7 h-4 bg-gray-600 rounded-full peer peer-checked:bg-accent after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:after:translate-x-3 relative"></div>
+                    </label>
+                </div>
+                <div id="calc-display" class="text-4xl font-light text-white overflow-hidden whitespace-nowrap">0</div>
+                <div id="calc-converted" class="text-lg font-medium text-gray-400 h-7">≈ TWD 0</div>
+            </div>
+        
+            <div class="grid grid-cols-4 gap-3 p-6 pt-2 bg-black/20">
+                <button onclick="pressCalc('C')" class="aspect-square rounded-full bg-[#A5A5A5] text-black text-xl font-bold">C</button>
+                <button onclick="pressOp('/',this)" class="aspect-square rounded-full bg-accent text-white text-xl font-bold">÷</button>
+                <button onclick="pressOp('*',this)" class="aspect-square rounded-full bg-accent text-white text-xl font-bold">×</button>
+                <button onclick="pressDelete()" class="aspect-square rounded-full bg-[#333333] text-white text-xl"><i class="fas fa-backspace"></i></button>
+                
+                <button onclick="pressNum('7')" class="aspect-square rounded-full bg-[#333333] text-white text-2xl">7</button>
+                <button onclick="pressNum('8')" class="aspect-square rounded-full bg-[#333333] text-white text-2xl">8</button>
+                <button onclick="pressNum('9')" class="aspect-square rounded-full bg-[#333333] text-white text-2xl">9</button>
+                <button onclick="pressOp('-',this)" class="aspect-square rounded-full bg-accent text-white text-xl font-bold">-</button>
+                
+                <button onclick="pressNum('4')" class="aspect-square rounded-full bg-[#333333] text-white text-2xl">4</button>
+                <button onclick="pressNum('5')" class="aspect-square rounded-full bg-[#333333] text-white text-2xl">5</button>
+                <button onclick="pressNum('6')" class="aspect-square rounded-full bg-[#333333] text-white text-2xl">6</button>
+                <button onclick="pressOp('+',this)" class="aspect-square rounded-full bg-accent text-white text-xl font-bold">+</button>
+                
+                <button onclick="pressNum('1')" class="aspect-square rounded-full bg-[#333333] text-white text-2xl">1</button>
+                <button onclick="pressNum('2')" class="aspect-square rounded-full bg-[#333333] text-white text-2xl">2</button>
+                <button onclick="pressNum('3')" class="aspect-square rounded-full bg-[#333333] text-white text-2xl">3</button>
+                <button id="btn-equals" onclick="calculateResult()" class="row-span-2 aspect-[1/2.2] rounded-full bg-accent text-white text-2xl font-bold">=</button>
+                
+                <button onclick="pressNum('0')" class="col-span-2 h-14 rounded-full bg-[#333333] text-white text-2xl text-left pl-8">0</button>
+                <button onclick="pressNum('.')" class="aspect-square rounded-full bg-[#333333] text-white text-2xl">.</button>
+            </div>
+            
+            <button onclick="toggleCalc()" class="w-full py-4 text-white/30 text-xs hover:text-white uppercase tracking-widest">Close Calculator</button>
+        </div>
+    </div>
+
+    <div id="shop-modal" class="fixed inset-0 z-[150] hidden bg-black/50 flex items-center justify-center p-4">
+        <div class="bg-white w-full max-w-md rounded-3xl p-6 shadow-2xl">
+            <h2 id="modal-title" class="text-xl font-bold mb-4">新增清單項目</h2>
+            
+            <input type="hidden" id="edit-item-id">
+
+            <div class="space-y-4">
+                <input id="shop-item-name" type="text" placeholder="想買什麼？" class="w-full p-3 bg-gray-50 rounded-xl">
+                <div class="space-y-2">
+                    <label class="text-[10px] font-bold text-gray-400 uppercase tracking-widest flex justify-between">
+                        照片網址 (可多筆)
+                        <button onclick="addPhotoInput('')" class="text-accent hover:underline">+ 新增網址</button>
+                    </label>
+                    <div id="photo-input-container" class="space-y-2">
+                        </div>
+                </div>  
+
+                <div class="grid grid-cols-2 gap-3">
+                    <select id="shop-attr" class="p-2 bg-gray-50 rounded-lg"><option>食</option><option>衣</option><option>住</option><option>行</option><option>育</option><option>樂</option></select>
+                    <input id="shop-cat" type="text" placeholder="子分類" class="p-2 bg-gray-50 rounded-lg">
+                </div>
+
+                <div class="grid grid-cols-2 gap-4 items-end"> <div class="space-y-1">
+                        <label class="text-[10px] font-bold text-gray-400 uppercase tracking-widest">地點</label>
+                        <select id="shop-loc" class="w-full h-[52px] px-4 bg-gray-50 rounded-2xl text-sm border-none ring-1 ring-gray-100 focus:ring-accent transition-all">
+                            <option>神戶</option>
+                            <option>大阪</option>
+                            <option>京都</option>
+                            <option>天橋立</option>
+                            <option>伊根舟屋</option>
+                            <option>城崎溫泉</option>
+                        </select>
+                    </div>
+
+                    <div class="space-y-1">
+                        <label class="text-[10px] font-bold text-gray-400 uppercase tracking-widest">想要程度</label>
+                        <div class="flex items-center justify-between h-[52px] px-3 bg-pink-50/30 rounded-2xl border border-pink-100/50 overflow-hidden">
+                            <div class="flex gap-2">
+                                <span onclick="setHeart(1)" class="heart-emoji-btn text-2xl leading-none" data-index="1">🤍</span>
+                                <span onclick="setHeart(2)" class="heart-emoji-btn text-2xl leading-none" data-index="2">🤍</span>
+                                <span onclick="setHeart(3)" class="heart-emoji-btn text-2xl leading-none" data-index="3">🤍</span>
+                            </div>
+                            <div id="heart-tag" class="shrink-0 px-2 py-1 bg-white rounded-full text-[10px] font-extrabold text-pink-300 shadow-sm border border-pink-100">
+                                心動
+                            </div>
+                        </div>
+                        <input type="hidden" id="shop-heart" value="0">
+                    </div>
+                </div>
+
+                <div class="flex gap-2 pt-4">
+                    <button onclick="closeShopModal()" class="flex-1 py-3 bg-gray-100 rounded-xl font-bold">取消</button>
+                    <button id="modal-submit-btn" onclick="saveShopItem()" style="background-color: #8E2B2B;" class="flex-1 py-3 text-white rounded-xl font-bold">確認</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="image-lightbox" onclick="closeLightbox()" class="fixed inset-0 z-[300] hidden bg-black/90 flex items-center justify-center p-4 cursor-zoom-out">
+        <img id="lightbox-img" src="" class="max-w-full max-h-full rounded-lg shadow-2xl transform transition-transform duration-300">
+        <p class="absolute bottom-8 text-white/50 text-xs tracking-widest uppercase">點擊任何地方關閉</p>
+    </div>
+
+    <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-database-compat.js"></script>
+    <script>
+        const firebaseConfig = {
+            apiKey: "AIzaSyDIaQM6Cgde70BuHDKFbdCDgKe0zBI11tc",
+            authDomain: "winter-trip-a559d.firebaseapp.com",
+            databaseURL: "https://winter-trip-a559d-default-rtdb.firebaseio.com",
+            projectId: "winter-trip-a559d",
+            storageBucket: "winter-trip-a559d.firebasestorage.app",
+            messagingSenderId: "833989633940",
+            appId: "1:833989633940:web:301a17973b5ef49b1a5181",
+            measurementId: "G-17LRCRJH8Y"
+        };
+
+        firebase.initializeApp(firebaseConfig);
+        const db = firebase.database();
+
+        db.ref('travelData').on('value', (snapshot) => {
+            const data = snapshot.val();
+            if (data) {
+                travelData = data;
+                renderDateNav();
+                renderEvents();
+                updateHeaderInfo();
+            }
+        });
+
+        db.ref('shoppingData').on('value', (snapshot) => {
+            const data = snapshot.val();
+            if (data) {
+                shoppingData = data;
+                // 檢查分頁狀態再畫圖，避免你的顯示問題
+                const shopSection = document.getElementById('section-shopping');
+                if (shopSection && !shopSection.classList.contains('hidden')) {
+                    renderShopping();
+                }
+            }
+        });
+        // --- 基礎資料 ---
+        let travelData = {
+            startDate: localStorage.getItem('startDate') || "2026-02-10",
+            totalDays: parseInt(localStorage.getItem('totalDays')) || 10,
+            currentDay: 0,
+            events: JSON.parse(localStorage.getItem('myTravelEvents')) || []
+        };
+
+        let myChart = null;
+        let currentRate = 0.215;
+        let currentEditingEventId = null;
+        let shoppingVisibility = {
+            'User A': true,
+            'User B': true,
+            'User C': true
+        };
+        // --- 初始化與導覽 ---
+        function renderDateNav() {
+            const nav = document.getElementById('date-nav');
+            nav.innerHTML = '';
+            for (let i = 0; i < travelData.totalDays; i++) {
+                let d = new Date(travelData.startDate);
+                d.setDate(d.getDate() + i);
+                let displayDate = (d.getMonth() + 1) + "/" + d.getDate();
+                const isActive = (i === travelData.currentDay);
+                const activeClass = isActive ? 'bg-[#8E2B2B] text-white border-[#8E2B2B]' : 'bg-white text-gray-400 border-gray-200';
+                nav.innerHTML += `
+                    <div onclick="selectDay(${i})" class="min-w-[70px] h-16 border-2 ${activeClass} rounded-md flex flex-col items-center justify-center cursor-pointer">
+                        <span class="text-[10px]">Day ${i + 1}</span>
+                        <span class="font-bold">${displayDate}</span>
+                    </div>`;
+            }
+        }
+        // --- 標題輸入
+        function saveHeadlineExplicit(val) {
+            localStorage.setItem(`headline-day-${travelData.currentDay}`, val);
+        }
+
+        function selectDay(newIndex) {
+            try {
+                // 1. 安全抓取目前的標題內容
+                const headlineEl = document.getElementById('day-headline');
+                if (headlineEl) {
+                    // 在切換天數前，把目前看到的文字存入「舊的」索引
+                    localStorage.setItem(`headline-day-${travelData.currentDay}`, headlineEl.value);
+                }
+
+                travelData.currentDay = newIndex;
+                renderDateNav();
+                renderEvents();
+                updateHeaderInfo(); // 這裡會把新日期的資料填回 input
+                updateDetailedWeather();
+
+            } catch (e) {
+                console.error("切換日期出錯:", e);
+                // 如果上面存檔出錯，至少讓切換功能繼續跑
+                travelData.currentDay = newIndex;
+                renderDateNav();
+                renderEvents();
+            }
+        }
+        // --- 天氣 ---
+        const WEATHER_API_KEY = "ed260d74a9ef55165d1397592ff7db1e";
+
+        async function updateDetailedWeather() {
+            const tempEl = document.getElementById('header-temp');
+            if (!tempEl) return;
+
+            const day = travelData.currentDay;
+            const locName = localStorage.getItem(`loc-name-${day}`) || "Osaka";
+            let searchCity = "Osaka"; // 預設值
+            if (locName.includes("京都")) searchCity = "Kyoto";
+            else if (locName.includes("東京")) searchCity = "Tokyo";
+            else if (locName.includes("神戶")) searchCity = "Kobe";
+            else if (locName.includes("城崎")) searchCity = "Toyooka"; // 城崎溫泉靠近豐岡市
+            else if (locName.includes("伊根") || locName.includes("天橋立")) searchCity = "Miyazu"; // 宮津市
+
+            if (cityLabel) cityLabel.innerText = searchCity.toUpperCase();
+
+            try {
+                const url = `https://api.openweathermap.org/data/2.5/forecast?q=${searchCity}&units=metric&appid=${WEATHER_API_KEY}`;
+                const res = await fetch(url);
+                const data = await res.json();
+
+                if (data.cod === "200") {
+                    // 更新主溫度與體感
+                    tempEl.innerText = `${Math.round(data.list[0].main.temp)}°`;
+                    document.getElementById('feels-like').innerText = `體感 ${Math.round(data.list[0].main.feels_like)}°`;
+                    
+                    // 更新主天氣圖示
+                    updateMainWeatherIcon(data.list[0].weather[0].main);
+
+                    // 更新降雨機率 (OpenWeatherMap 的 5天預報中有 pop 欄位)
+                    const rainChance = (data.list[0].pop * 100).toFixed(0);
+                    document.getElementById('rain-chance').innerHTML = `<i class="fas fa-umbrella mr-1"></i>${rainChance}%`;
+
+                    // 渲染每小時預報 (縮小寬度，讓它更好看)
+                    const hourlyContainer = document.getElementById('hourly-forecast');
+                    if (hourlyContainer) {
+                        hourlyContainer.innerHTML = data.list.slice(0, 6).map(item => `
+                            <div class="flex flex-col items-center min-w-[40px]">
+                                <p class="text-[9px] opacity-40">${new Date(item.dt * 1000).getHours()}h</p>
+                                <i class="${getWeatherIconClass(item.weather[0].main)} text-xs my-1 text-white/80"></i>
+                                <p class="text-[11px] font-bold">${Math.round(item.main.temp)}°</p>
+                            </div>
+                        `).join('');
+                    }
+                }
+            } catch (e) {
+                tempEl.innerText = "--°";
+                console.error("天氣讀取失敗");
+            }
+        }
+
+        // 輔助函數：根據天氣狀態返回對應的 FontAwesome Class
+        function getWeatherIconClass(status) {
+            if (status === "Clear") return "fas fa-sun text-yellow-300";
+            if (status === "Clouds") return "fas fa-cloud text-gray-300";
+            if (status === "Rain") return "fas fa-cloud-showers-heavy text-blue-400";
+            if (status === "Snow") return "fas fa-snowflake text-blue-100";
+            return "fas fa-cloud-sun text-stone-300";
+        }
+
+        function updateMainWeatherIcon(status) {
+            const container = document.getElementById('weather-icon-container');
+            container.innerHTML = `<i class="${getWeatherIconClass(status)} text-3xl"></i>`;
+        }
+        function switchMainTab(tabName) {
+            const sections = document.querySelectorAll('.main-section');
+            sections.forEach(s => s.classList.add('hidden'));
+
+            const targetSection = document.getElementById(`section-${tabName}`);
+            if (targetSection) targetSection.classList.remove('hidden');
+
+            document.querySelectorAll('#btn-itinerary, #btn-accounting, #btn-shopping').forEach(b => {
+                b.classList.remove('tab-active', 'text-accent'); b.classList.add('text-gray-400');
+            });
+            const activeBtn = document.getElementById(`btn-${tabName}`);
+            if(activeBtn) { activeBtn.classList.add('tab-active'); activeBtn.classList.remove('text-gray-400'); }
+
+            if (tabName === 'shopping') renderShopping();
+            else if (tabName === 'itinerary') renderEvents();
+            else if (tabName === 'accounting') renderAccountingStats();
+        }
+        // --- Header 專屬功能 ---
+
+        // 1. 儲存每日大標 (儲存到 localStorage，按日期分開)
+        function saveHeadline(val) {
+            const day = travelData.currentDay; 
+            localStorage.setItem(`headline-day-${day}`, val);
+            console.log(`已儲存 Day ${day} 的標題: ${val}`);
+        }
+
+        // 2. 編輯今日地標連結
+        function editHeaderMap() {
+            const day = travelData.currentDay;
+            const currentName = document.getElementById('header-location-name').innerText;
+            const name = prompt("請輸入地標名稱 (如: 大阪環球影城):", currentName);
+            const url = prompt("請貼上 Google Maps 網址:");
+            
+            if (name) {
+                document.getElementById('header-location-name').innerText = name;
+                localStorage.setItem(`loc-name-${travelData.currentDay}`, name);
+                updateDetailedWeather();
+            }
+            if (url) {
+                document.getElementById('header-map-link').href = url;
+                localStorage.setItem(`loc-url-${travelData.currentDay}`, url);
+            }
+        }
+
+        // 3. 在切換日期或載入時，更新 Header 資訊
+        function updateHeaderInfo() {
+            const day = travelData.currentDay;
+            
+            // 讀取標題
+            const savedHeadline = localStorage.getItem(`headline-day-${day}`) || "標題";
+            document.getElementById('day-headline').value = savedHeadline;
+            
+            // 讀取地點
+            const savedLocName = localStorage.getItem(`loc-name-${day}`) || "設定今日主要地標";
+            const savedLocUrl = localStorage.getItem(`loc-url-${day}`) || "#";
+            document.getElementById('header-location-name').innerText = savedLocName;
+            document.getElementById('header-map-link').href = savedLocUrl;
+        }
+
+        // 4. 當地時間每秒更新
+        function startClock() {
+            setInterval(() => {
+                const now = new Date();
+                const options = { timeZone: "Asia/Tokyo", hour: '2-digit', minute: '2-digit', hour12: false };
+                const timeStr = new Intl.DateTimeFormat('zh-TW', options).format(now);
+                const el = document.getElementById('header-time');
+                if(el) el.innerText = timeStr;
+            }, 1000);
+        }
+
+        // --- 行程渲染 ---
+        function renderEvents() {
+            const list = document.getElementById('drag-container');
+            list.innerHTML = '';
+            const todayEvents = travelData.events.filter(e => e.day === travelData.currentDay);
+            todayEvents.sort((a, b) => a.time.localeCompare(b.time));
+
+            const typeColors = {
+                '午餐': 'bg-orange-500', '晚餐': 'bg-green-600', '景點': 'bg-emerald-600',
+                '交通': 'bg-blue-800', '購物逛街': 'bg-pink-500', '超市': 'bg-red-500',
+                '溫泉': 'bg-indigo-500', '旅館': 'bg-stone-700', '彈性': 'bg-gray-400'
+            };
+            let dayTotal = 0;
+
+            todayEvents.forEach(event => {
+                const bgColor = typeColors[event.type] || 'bg-gray-400';
+                const eventExpTotal = (event.expenses || []).reduce((sum, exp) => sum + Number(exp.amount), 0);
+                dayTotal += eventExpTotal;
+
+                list.innerHTML += `
+                <div class="flex items-stretch mb-6 group">
+                    <div class="relative flex-1 bg-white p-4 rounded-l-xl shadow-sm border-l-4 border-[#8E2B2B]" onclick="openEditModal(${event.id})">
+                        <div class="absolute -left-[31px] top-4 w-5 h-5 bg-accent rounded-full border-4 border-[#F9F7F2]"></div>
+                        <div class="flex items-center space-x-4 mb-1">
+                            <span class="text-lg font-bold">${event.time}</span>
+                            <span class="${bgColor} px-2.5 py-1 rounded text-[13px] text-white font-bold">${event.type}</span>
+                        </div>
+                        <h3 class="text-base font-bold text-gray-700 truncate">${event.title}</h3>
+                        ${event.note ? `<p class="text-xs text-gray-400 mt-1">${event.note}</p>` : ''}
+                    </div>
+                    <div class="w-24 bg-stone-100 rounded-r-xl border-l border-dashed border-gray-200 flex flex-col items-center justify-center cursor-pointer active:bg-gray-200" 
+                        onclick="event.stopPropagation(); openExpenseModal(${event.id});">
+                        <span class="text-[9px] text-gray-400 font-bold uppercase">Expense</span>
+                        <span class="text-accent font-serif font-bold">¥ ${eventExpTotal.toLocaleString()}</span>
+                    </div>
+                </div>`;
+            });
+            document.getElementById('total-expense').innerText = `¥ ${dayTotal.toLocaleString()}`;
+        }
+
+        // --- 行程編輯 ---
+        function openAddModal() {
+            const modal = document.getElementById('edit-modal');
+            document.getElementById('modal-title').value = "";
+            document.getElementById('modal-time').value = "12:00";
+            document.getElementById('modal-type').value = "景點";
+            document.getElementById('modal-map').value = "";
+            document.getElementById('modal-note').value = "";
+            delete modal.dataset.editingId;
+            modal.classList.remove('hidden');
+            modal.classList.add('flex');
+        }
+
+        function openEditModal(eventId) {
+            const event = travelData.events.find(e => e.id === eventId);
+            const modal = document.getElementById('edit-modal');
+            document.getElementById('modal-title').value = event.title;
+            document.getElementById('modal-time').value = event.time;
+            document.getElementById('modal-type').value = event.type;
+            document.getElementById('modal-map').value = event.map || "";
+            document.getElementById('modal-note').value = event.note || "";
+            modal.dataset.editingId = eventId;
+            modal.classList.remove('hidden');
+            modal.classList.add('flex');
+        }
+
+        function updateEvent() {
+            const modal = document.getElementById('edit-modal');
+            const editingId = modal.dataset.editingId;
+            const title = document.getElementById('modal-title').value;
+            const time = document.getElementById('modal-time').value;
+            const type = document.getElementById('modal-type').value;
+            if (!title) return alert("請輸入標題");
+
+            if (editingId) {
+                const event = travelData.events.find(e => e.id === Number(editingId));
+                event.title = title; event.time = time; event.type = type;
+                event.map = document.getElementById('modal-map').value;
+                event.note = document.getElementById('modal-note').value;
+            } else {
+                travelData.events.push({ id: Date.now(), day: travelData.currentDay, title, time, type, map: document.getElementById('modal-map').value, note: document.getElementById('modal-note').value, expenses: [] });
+            }
+            saveData();
+            closeModal();
+            renderEvents();
+        }
+
+        function deleteEvent() {
+            const id = document.getElementById('edit-modal').dataset.editingId;
+            if (id && confirm('確定刪除？')) {
+                travelData.events = travelData.events.filter(e => e.id !== Number(id));
+                saveData();
+                closeModal();
+                renderEvents();
+            }
+        }
+
+        function closeModal() { document.getElementById('edit-modal').classList.replace('flex', 'hidden'); }
+
+        // --- 消費明細 ---
+        function openExpenseModal(eventId) {
+            currentEditingEventId = eventId;
+            const event = travelData.events.find(e => e.id === eventId);
+            document.getElementById('expense-modal').classList.replace('hidden', 'flex');
+            renderExpenseList(event);
+        }
+
+        function renderExpenseList(event) {
+            const list = document.getElementById('expense-list');
+            list.innerHTML = '';
+            let total = 0;
+            const expenses = event.expenses || [];
+            expenses.forEach((exp, index) => {
+                total += exp.amount;
+                const methodTag = exp.method === '信用卡' ? '💳 刷卡' : '💵 現金';
+                list.innerHTML += `
+                    <div class="flex justify-between items-center bg-white border p-3 rounded-lg shadow-sm">
+                        <div>
+                            <span class="text-[9px] bg-stone-100 px-1.5 py-0.5 rounded text-gray-500">${exp.type} | ${methodTag}</span>
+                            <div class="font-bold">${exp.name}</div>
+                        </div>
+                        <div class="flex items-center space-x-3">
+                            <span class="font-bold">¥ ${exp.amount.toLocaleString()}</span>
+                            <button onclick="deleteExpenseItem(${index})" class="text-gray-300 hover:text-red-500"><i class="fas fa-trash-alt"></i></button>
+                        </div>
+                    </div>`;
+            });
+            document.getElementById('expense-total').innerText = `¥ ${total.toLocaleString()}`;
+        }
+
+        function addExpenseItem() {
+            const name = document.getElementById('new-exp-name').value;
+            const type = document.getElementById('new-exp-type').value;
+            const amount = document.getElementById('new-exp-amount').value;
+            const method = document.getElementById('new-exp-method').value;
+
+            if (!name || !amount) return alert("請輸入項目名稱與金額");
+
+            // 🌟 修正點：確保從「全域資料」中精準找到該 ID 的行程
+            const event = travelData.events.find(e => e.id === Number(currentEditingEventId));
+            
+            if (!event) {
+                alert("找不到對應行程，請嘗試重新開啟明細視窗");
+                return;
+            }
+
+            if (!event.expenses) event.expenses = [];
+
+            // 新增項目
+            event.expenses.push({ 
+                name: name, 
+                type: type, 
+                amount: Number(amount),
+                method: method
+            });
+
+            // 清空輸入框
+            document.getElementById('new-exp-name').value = '';
+            document.getElementById('new-exp-amount').value = '';
+
+            // 儲存並刷新
+            saveAndSync(); 
+            renderExpenseList(event); // 重新畫出該彈窗內的清單
+        }
+
+        function saveAndSync() {
+            localStorage.setItem('myTravelEvents', JSON.stringify(travelData.events));
+            renderEvents(); // 更新主畫面天數總額
+            if (!document.getElementById('full-expense-list-container').classList.contains('hidden')) {
+                renderFullExpenseList();
+            }
+        }
+
+        function deleteExpenseItem(index) {
+            const event = travelData.events.find(e => e.id === currentEditingEventId);
+            event.expenses.splice(index, 1);
+            saveData();
+            renderExpenseList(event);
+            renderEvents();
+        }
+
+        function closeExpenseModal() { document.getElementById('expense-modal').classList.replace('flex', 'hidden'); }
+
+        // --- 統計與計算機 ---
+        async function updateLiveRate() {
+            try {
+                const response = await fetch('https://open.er-api.com/v6/latest/JPY');
+                const data = await response.json();
+                if (data && data.rates && data.rates.TWD) {
+                    currentRate = data.rates.TWD;
+                    const rateTag = document.getElementById('rate-tag');
+                    if (rateTag) {
+                        rateTag.innerText = `實時匯率: ${currentRate.toFixed(4)}`;
+                    }
+                }
+            } catch (error) {
+                console.warn("匯率更新失敗，使用保底值 0.215");
+                currentRate = 0.215; 
+            }
+        }
+
+        function renderAccountingStats() {
+            let total = 0, cash = 0, card = 0;
+            const categoryMap = { '飲食': 0, '交通門票': 0, '購物': 0, '住宿': 0 };
+            travelData.events.forEach(e => {
+                (e.expenses || []).forEach(ex => {
+                    total += ex.amount;
+                    if (ex.method === '信用卡') card += ex.amount; else cash += ex.amount;
+                    if (categoryMap[ex.type] !== undefined) categoryMap[ex.type] += ex.amount;
+                });
+            });
+
+            document.getElementById('stats-total').innerText = `¥ ${total.toLocaleString()}`;
+            document.getElementById('stats-cash').innerText = `¥ ${cash.toLocaleString()}`;
+            document.getElementById('stats-card').innerText = `¥ ${card.toLocaleString()}`;
+
+            const ctx = document.getElementById('categoryChart').getContext('2d');
+            if (myChart) myChart.destroy();
+            const labels = Object.keys(categoryMap).filter(k => categoryMap[k] > 0);
+            myChart = new Chart(ctx, {
+                type: 'doughnut',
+                data: {
+                    labels: labels,
+                    datasets: [{ 
+                        data: labels.map(k => categoryMap[k]), 
+                        backgroundColor: ['#E63946', '#457B9D', '#A8DADC', '#B59F7A'],
+                        borderWidth: 0 
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    cutout: '65%',
+                    plugins: {
+                        // 🌟 調整圖例（上方或側邊的文字）
+                        legend: {
+                            position: 'left', align: 'center', // 改到下面比較不擠
+                            labels: {
+                                padding: 20,
+                                font: {
+                                    size: 14, // 👈 這裡改大字體大小
+                                    family: "'Noto Serif TC', serif", // 保持與網頁字體一致
+                                    weight: 'bold'
+                                },
+                                color: '#2D2D2D' // 讓字體顏色更深一點
+                            }
+                        },
+                        // 🌟 調整點擊或滑過時的提示框文字
+                        tooltip: {
+                            titleFont: { size: 16 },
+                            bodyFont: { size: 14 },
+                            padding: 12
+                        }
+                    }
+                }
+            });
+        }
+
+        let currentInput = "0";
+        let previousInput = "";
+        let operator = null;
+        let shouldResetScreen = false;
+
+        function pressNum(num) {
+            if (currentInput === "0" || shouldResetScreen) {
+                currentInput = num;
+                shouldResetScreen = false;
+            } else {
+                currentInput += num;
+            }
+            updateDisplay();
+        }
+
+        function pressOp(op, btnElement) {
+            if (operator !== null && !shouldResetScreen) calculateResult(); 
+            clearOpStyles();
+            if (btnElement) {
+                btnElement.classList.add('op-active');
+            }
+            previousInput = currentInput;
+            operator = op;
+            shouldResetScreen = true;
+        }
+
+        function calculateResult() {
+            if (operator === null || shouldResetScreen) return;
+            let result;
+            const prev = parseFloat(previousInput);
+            const current = parseFloat(currentInput);
+
+            switch (operator) {
+                case '+': result = prev + current; break;
+                case '-': result = prev - current; break;
+                case '*': result = prev * current; break;
+                case '/': result = prev / current; break;
+                default: return;
+            }
+
+            currentInput = result.toString();
+            operator = null;
+            updateDisplay();
+            clearOpStyles();
+        }
+
+        function clearOpStyles() {
+            const ops = document.querySelectorAll('.bg-accent'); // 抓取所有橘紅色的運算按鈕
+            ops.forEach(btn => btn.classList.remove('op-active'));
+        }
+
+        function updateDisplay() {
+            const display = document.getElementById('calc-display');
+            const converted = document.getElementById('calc-converted');
+            const autoConvert = document.getElementById('auto-convert').checked;
+
+            display.innerText = currentInput;
+
+            // 匯率換算邏輯
+            if (autoConvert && currentRate) {
+                const twd = (parseFloat(currentInput) * currentRate).toLocaleString(undefined, {maximumFractionDigits: 0});
+                converted.innerText = `≈ TWD ${twd}`;
+            } else {
+                converted.innerText = "";
+            }
+        }
+
+        function pressDelete() {
+            currentInput = currentInput.slice(0, -1);
+            if (currentInput === "") currentInput = "0";
+            updateDisplay();
+        }
+
+        function clearCalc() {
+            currentInput = "0";
+            previousInput = "";
+            operator = null;
+            updateDisplay();
+            clearOpStyles();
+        }
+
+        function pressCalc(cmd) {
+            if (cmd === 'C') clearCalc();
+            updateDisplay();
+        }
+
+        async function toggleCalc() {
+            const modal = document.getElementById('calc-modal');
+            if (modal.classList.contains('hidden')) {
+                await updateLiveRate();
+                document.getElementById('rate-tag').innerText = `實時匯率: ${currentRate.toFixed(4)}`;
+                modal.classList.replace('hidden', 'flex');
+                clearCalc();
+            } else {
+                modal.classList.replace('flex', 'hidden');
+            }
+        }
+
+        // ---第二分頁：消費明細總覽---
+        // 控制列表開關
+        function toggleExpenseList() {
+            const container = document.getElementById('full-expense-list-container');
+            const arrow = document.getElementById('expense-list-arrow');
+            
+            if (container.classList.contains('hidden')) {
+                renderFullExpenseList(); // 展開時重新計算並渲染
+                container.classList.remove('hidden');
+                arrow.style.transform = 'rotate(180deg)';
+            } else {
+                container.classList.add('hidden');
+                arrow.style.transform = 'rotate(0deg)';
+            }
+        }
+
+        // 渲染所有明細
+        function renderFullExpenseList() {
+            const body = document.getElementById('full-expense-list-body');
+            body.innerHTML = '';
+
+            if (travelData.events.length === 0) {
+                body.innerHTML = '<tr><td colspan="3" class="p-10 text-center text-gray-400">尚無任何消費紀錄</td></tr>';
+                return;
+            }
+
+            // 依天數排序所有事件
+            const sortedEvents = [...travelData.events].sort((a, b) => a.day - b.day || a.time.localeCompare(b.time));
+
+            sortedEvents.forEach(event => {
+                if (event.expenses && event.expenses.length > 0) {
+                    event.expenses.forEach(exp => {
+                        const dateText = `Day ${event.day + 1}`;
+                        const methodIcon = exp.method === '信用卡' ? '💳' : '💵';
+                        
+                        const row = `
+                            <tr class="border-b border-gray-50 hover:bg-stone-50">
+                                <td class="px-6 py-3">
+                                    <div class="text-[9px] text-gray-400">${dateText} - ${event.title}</div>
+                                    <div class="font-medium">${exp.name}</div>
+                                </td>
+                                <td class="px-6 py-3 text-xs text-gray-500">${methodIcon} ${exp.method}</td>
+                                <td class="px-6 py-3 text-right font-bold text-accent">¥ ${exp.amount.toLocaleString()}</td>
+                            </tr>
+                        `;
+                        body.insertAdjacentHTML('beforeend', row);
+                    });
+                }
+            });
+
+            if (body.innerHTML === '') {
+                body.innerHTML = '<tr><td colspan="3" class="p-10 text-center text-gray-400">尚無任何消費紀錄</td></tr>';
+            }
+        }
+
+        // --- 第三分頁：購物清單 --- 
+        // 初始資料結構
+        let shoppingData = JSON.parse(localStorage.getItem('travelShopping')) || [];
+        let currentAddingUser = "";
+
+        // 打開/關閉彈窗
+        function openShopModal(user) {
+            currentAddingUser = user;
+            document.getElementById('shop-modal').classList.remove('hidden');
+            setHeart(0);
+            document.getElementById('photo-input-container').innerHTML = '';
+            addPhotoInput('');
+        }
+        function closeShopModal() {
+            document.getElementById('shop-modal').classList.add('hidden');
+        }
+
+        // 打開編輯彈窗
+        function openEditShopModal(itemId) {
+            const item = shoppingData.find(i => i.id === itemId);
+            if (!item) return;
+            const savedHeart = item.heart || 0;
+            setHeart(savedHeart);
+
+            // 填充資料
+            document.getElementById('edit-item-id').value = item.id;
+            document.getElementById('shop-item-name').value = item.name;
+            document.getElementById('shop-attr').value = item.attr;
+            document.getElementById('shop-cat').value = item.cat;
+            document.getElementById('shop-loc').value = item.loc;
+            document.getElementById('shop-heart').value = item.heart;
+            document.getElementById('photo-input-container').innerHTML = '';
+            const urls = item.photoUrls || (item.photoUrl ? [item.photoUrl] : []);
+            if (urls.length === 0) addPhotoInput('');
+            else urls.forEach(url => addPhotoInput(url));
+            // 修改標題與按鈕
+            document.getElementById('modal-title').innerText = "編輯清單項目";
+            document.getElementById('shop-modal').classList.remove('hidden');
+            currentAddingUser = item.user; // 確保編輯後仍屬於同一個人
+        }
+
+        // 儲存項目 (同時支援新增與編輯)
+        function saveShopItem() {
+            console.log("正在嘗試儲存...");
+
+            // 1. 抓取名稱
+            const nameEl = document.getElementById('shop-item-name');
+            if (!nameEl || !nameEl.value.trim()) {
+                alert("請輸入商品名稱");
+                return;
+            }
+            const itemName = nameEl.value.trim();
+
+            // 2. 抓取照片網址 (這裡我檢查並確保只宣告一次)
+            let finalPhotoUrls = []; 
+            const allPhotoInputs = document.querySelectorAll('.shop-photo-urls'); // 改名避免重複
+            if (allPhotoInputs.length > 0) {
+                finalPhotoUrls = Array.from(allPhotoInputs)
+                                    .map(input => input.value)
+                                    .filter(url => url.trim() !== "");
+            }
+
+            // 3. 安全抓取其他選單資料
+            const attr = document.getElementById('shop-attr')?.value || "食";
+            const cat = document.getElementById('shop-cat')?.value || "一般";
+            const loc = document.getElementById('shop-loc')?.value || "大阪";
+            const heart = parseInt(document.getElementById('shop-heart')?.value || 0);
+            const editIdEl = document.getElementById('edit-item-id');
+            const editId = editIdEl ? editIdEl.value : "";
+
+            // 4. 打包資料
+            const itemData = {
+                name: itemName,
+                photoUrls: finalPhotoUrls,
+                attr: attr,
+                cat: cat,
+                loc: loc,
+                heart: heart,
+                user: currentAddingUser
+            };
+
+            // 5. 判斷新增或更新
+            if (editId) {
+                const index = shoppingData.findIndex(i => i.id == editId);
+                if (index !== -1) {
+                    shoppingData[index] = { ...shoppingData[index], ...itemData };
+                }
+            } else {
+                shoppingData.push({
+                    id: Date.now(),
+                    checked: false,
+                    ...itemData
+                });
+            }
+
+            // 6. 寫入儲存空間並更新畫面
+            localStorage.setItem('travelShopping', JSON.stringify(shoppingData));
+
+            if (typeof db !== 'undefined') {
+                db.ref('shoppingData').set(shoppingData)
+                .then(() => {
+                    console.log("購物資料已同步至雲端");
+                    closeShopModal();
+                })
+                .catch((error) => {
+                    console.error("同步失敗：", error);
+                    closeShopModal();
+                });
+            } else {
+                closeShopModal();
+                const shopSection = document.getElementById('section-shopping');
+                if (shopSection && !shopSection.classList.contains('hidden')) {
+                    renderShopping();
+                }
+            }
+        }
+        function toggleUserList(user) {
+            shoppingVisibility[user] = !shoppingVisibility[user];
+            
+            // 更新眼睛圖示
+            const eyeIcon = document.getElementById(`eye-${user}`);
+            if (eyeIcon) {
+                eyeIcon.className = shoppingVisibility[user] ? 'fas fa-eye' : 'fas fa-eye-slash text-gray-300';
+            }
+            
+            renderShopping(); // 重新渲染
+        }
+
+        function renderShopping(filterKeyword = 'ALL') {
+            const shoppingSection = document.getElementById('section-shopping');
+            // 🛑 防護傘：如果購物分頁是隱藏的，就不準執行渲染
+            if (shoppingSection && shoppingSection.classList.contains('hidden')) return;
+
+            updateFilterOptions();
+            const ids = ['shop-list-A', 'shop-list-B', 'shop-list-C'];
+            const users = ['User A', 'User B', 'User C'];
+
+            users.forEach((user, index) => {
+                const container = document.getElementById(ids[index]);
+                if (!container) return;
+                if (!shoppingVisibility[user]) {
+                    container.innerHTML = `
+                        <div class="py-4 text-center text-[10px] text-gray-300 italic border border-dashed border-gray-100 rounded-xl">
+                            內容已隱藏
+                        </div>`;
+                    return;
+                }
+
+                container.innerHTML = '';
+                let userItems = shoppingData.filter(item => {
+                    const isUser = item.user === user;
+                    if (filterKeyword === 'ALL') return isUser;
+                    const heartStr = "❤️".repeat(item.heart);
+                    return isUser && (item.loc === filterKeyword || item.attr === filterKeyword || item.cat === filterKeyword || heartStr.includes(filterKeyword));
+                });
+                userItems.sort((a, b) => a.checked - b.checked);
+                userItems.forEach(item => {
+                    const heartStr = "❤️".repeat(item.heart) || "🤍🤍🤍";
+                    const urls = item.photoUrls || (item.photoUrl ? [item.photoUrl] : []);
+                    let photoHtml = '';
+                    if (urls.length > 0) {
+                        photoHtml = `<div class="flex gap-2 overflow-x-auto pb-2 no-scrollbar mb-2">
+                            ${urls.map(url => `<img src="${url}" ondblclick="openLightbox('${url}')" class="w-32 h-32 object-cover rounded-xl border border-gray-100 shrink-0 cursor-zoom-in ${item.checked ? 'opacity-50 grayscale-[0.5]' : ''}" onerror="this.src='https://placehold.co/400x400?text=Image+Error'">`).join('')}
+                        </div>`;
+                    }
+                    const card = `
+                        <div class="bg-white p-3 rounded-2xl shadow-sm border border-gray-100 mb-3 transition-all ${item.checked ? 'bg-gray-50/50 border-dashed opacity-70' : ''}">
+                            ${photoHtml}
+                            <div class="flex justify-between items-start mb-2">
+                                <span class="font-bold ${item.checked ? 'text-gray-400 line-through' : 'text-gray-800'}">${item.name}</span>
+                                <div class="flex gap-4 items-center">
+                                    <button onclick="openEditShopModal(${item.id})" class="text-gray-300 hover:text-blue-500 text-lg"><i class="fas fa-edit"></i></button>
+                                    <input type="checkbox" onchange="toggleItemCheck(${item.id})" ${item.checked ? 'checked' : ''} class="w-5 h-5 rounded-lg border-gray-300 text-[#8E2B2B]">
+                                </div>
+                            </div>
+                            <div class="flex flex-wrap gap-1 ${item.checked ? 'grayscale opacity-50' : ''}">
+                                <span class="text-[9px] bg-blue-50 text-blue-500 px-1.5 py-0.5 rounded">📍 ${item.loc}</span>
+                                <span class="text-[9px] bg-orange-50 text-orange-500 px-1.5 py-0.5 rounded">🏷️ ${item.cat}</span>
+                                <span class="text-[9px] bg-red-50 text-red-500 px-1.5 py-0.5 rounded">${heartStr}</span>
+                            </div>
+                        </div>`;
+                    container.insertAdjacentHTML('beforeend', card);
+                });
+            });
+        }    
+
+        // 🌟 配合使用的自動更新選單函數 (記得也要加上這段)
+        function updateFilterOptions() {
+            const catSelect = document.getElementById('filter-cat');
+            if (!catSelect) return;
+            
+            // 取得目前所有項目中「不重複」的子分類
+            const categories = [...new Set(shoppingData.map(item => item.cat))].filter(c => c && c.trim() !== "");
+            
+            // 保留預設選項，清空舊的自定義選項
+            catSelect.innerHTML = '<option value="ALL">🔍 所有子分類</option>';
+            
+            categories.forEach(cat => {
+                const opt = document.createElement('option');
+                opt.value = cat;
+                opt.innerText = cat;
+                catSelect.appendChild(opt);
+            });
+        }
+        
+        function toggleItemCheck(id) {
+            const item = shoppingData.find(i => i.id === id);
+            if (item) {
+                item.checked = !item.checked;
+                localStorage.setItem('travelShopping', JSON.stringify(shoppingData));
+                renderShopping();
+            }
+        }
+        //新增多個網址
+        function addPhotoInput(url = '') {
+            const container = document.getElementById('photo-input-container');
+            const div = document.createElement('div');
+            div.className = "flex gap-2";
+            div.innerHTML = `
+                <input type="text" value="${url}" placeholder="https://..." class="shop-photo-urls flex-1 p-3 bg-gray-50 rounded-xl text-sm">
+                <button onclick="this.parentElement.remove()" class="text-gray-400 px-2"><i class="fas fa-minus-circle"></i></button>
+            `;
+            container.appendChild(div);
+        }
+            // 在打開彈窗時初始化
+        function resetPhotoInputs(urls = []) {
+            const container = document.getElementById('photo-input-container');
+            container.innerHTML = ''; // 先清空
+            if (urls.length === 0) {
+                addPhotoInput(''); // 預設給一個空的
+            } else {
+                urls.forEach(url => addPhotoInput(url));
+            }
+        }
+
+        //喜愛程度
+        function setHeart(val) {
+            const heartInput = document.getElementById('shop-heart');
+            const heartBtns = document.querySelectorAll('.heart-emoji-btn');
+            const heartTag = document.getElementById('heart-tag');
+            
+            // 如果點選目前的數值，則重置為 0 (方便取消)
+            let finalVal = (heartInput.value == val) ? 0 : val;
+            heartInput.value = finalVal;
+
+            // 更新 Emoji 狀態
+            heartBtns.forEach((btn, index) => {
+                if (index < finalVal) {
+                    btn.innerText = "❤️"; // 變紅心
+                    btn.classList.add('heart-active');
+                } else {
+                    btn.innerText = "🤍"; // 回白心
+                    btn.classList.remove('heart-active');
+                }
+            });
+
+            // 更新文字與可愛標籤顏色
+            const statusData = [
+                { text: "看看", color: "text-gray-300", bg: "bg-white" },
+                { text: "心動", color: "text-pink-400", bg: "bg-pink-100" },
+                { text: "想要", color: "text-pink-500", bg: "bg-pink-200" },
+                { text: "必買", color: "text-white", bg: "bg-[#8E2B2B]" }
+            ];
+            
+            const status = statusData[finalVal];
+            heartTag.innerText = status.text;
+            heartTag.className = `ml-2 px-3 py-1 rounded-full text-[10px] font-extrabold shadow-sm border border-pink-100 transition-all ${status.color} ${status.bg}`;
+        }
+
+        //雙擊放大圖片
+            // 打開燈箱
+        function openLightbox(url) {
+            const lightbox = document.getElementById('image-lightbox');
+            const img = document.getElementById('lightbox-img');
+            if (!lightbox || !img) return;
+
+            img.src = url;
+            lightbox.classList.remove('hidden');
+           
+            // 加上一個淡入效果
+            lightbox.style.opacity = '0';
+            setTimeout(() => {
+                lightbox.style.transition = 'opacity 0.3s ease';
+                lightbox.style.opacity = '1';
+            }, 10);
+        }
+
+            // 關閉燈箱
+        function closeLightbox() {
+            const lightbox = document.getElementById('image-lightbox');
+            if (lightbox) {
+                lightbox.style.opacity = '0';
+                setTimeout(() => {
+                    lightbox.classList.add('hidden');
+                }, 300);
+            }
+        }
+
+        // 一鍵篩選
+        function filterShopping(keyword) {
+            renderShopping(keyword);
+        }
+
+        // --- 通用 ---
+        function changeTotalDays(delta) {
+            travelData.totalDays = Math.max(1, travelData.totalDays + delta);
+            saveData(); renderDateNav();
+        }
+
+        function updateStartDate(date) {
+            if (date) { travelData.startDate = date; saveData(); renderDateNav(); }
+        }
+
+        function saveData() {
+            localStorage.setItem('myTravelEvents', JSON.stringify(travelData.events));
+            localStorage.setItem('startDate', travelData.startDate);
+            localStorage.setItem('totalDays', travelData.totalDays);
+            if (typeof db !== 'undefined') {
+                db.ref('travelData').set(travelData)
+                .then(() => console.log("雲端行程同步成功！"))
+                .catch((error) => console.error("同步失敗：", error));
+            }
+        }
+
+        function exportData() {
+            const data = JSON.stringify(localStorage);
+            const blob = new Blob([data], {type: 'application/json'});
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `travel_backup_${new Date().toLocaleDateString()}.json`;
+            a.click();
+        }
+
+        function importData() {
+            const input = document.createElement('input');
+            input.type = 'file';
+            input.onchange = e => {
+                const file = e.target.files[0];
+                const reader = new FileReader();
+                reader.onload = readerEvent => {
+                    const content = JSON.parse(readerEvent.target.result);
+                    Object.keys(content).forEach(key => {
+                        localStorage.setItem(key, content[key]);
+                    });
+                    alert('匯入成功！網頁將重新載入');
+                    location.reload();
+                };
+                reader.readAsText(file);
+            };
+            input.click();
+        }
+        window.onload = function() {
+            renderDateNav();
+            renderEvents();
+            startClock();       // 啟動時鐘
+            updateHeaderInfo();
+            updateDetailedWeather();
+            const shopSection = document.getElementById('section-shopping');
+            if (shopSection && !shopSection.classList.contains('hidden')) {
+                renderShopping();
+            }
+        }; // 🌟 這是 window.onload 的結束
+    </script>
+</body>
+</html>
+
+
+
