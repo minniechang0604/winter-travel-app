@@ -139,7 +139,7 @@
                     </div>
                     <div class="text-right">
                         <p id="rain-chance" class="text-blue-300 font-bold text-[10px]"><i class="fas fa-umbrella mr-0.5"></i>--%</p>
-                        <p id="location-city" class="text-[8px] text-white/40 uppercase tracking-widest">OSAKA</p>
+                        <p id="cityLabel" class="text-[8px] text-white/40 uppercase tracking-widest">OSAKA</p>
                     </div>
                 </div>
                 
@@ -601,52 +601,68 @@
         const WEATHER_API_KEY = "ed260d74a9ef55165d1397592ff7db1e";
 
         async function updateDetailedWeather() {
+            const label = document.getElementById('cityLabel');
             const tempEl = document.getElementById('header-temp');
+            const feelsLikeEl = document.getElementById('feels-like');
+            const rainEl = document.getElementById('rain-chance');
+            const hourlyContainer = document.getElementById('hourly-forecast');
+
             if (!tempEl) return;
 
+            // 1. 根據當前日期決定搜尋城市
             const day = travelData.currentDay;
             const locName = localStorage.getItem(`loc-name-${day}`) || "Osaka";
-            let searchCity = "Osaka"; // 預設值
+            let searchCity = "Osaka"; 
+            
             if (locName.includes("京都")) searchCity = "Kyoto";
-            else if (locName.includes("東京")) searchCity = "Tokyo";
             else if (locName.includes("神戶")) searchCity = "Kobe";
-            else if (locName.includes("城崎")) searchCity = "Toyooka"; // 城崎溫泉靠近豐岡市
-            else if (locName.includes("伊根") || locName.includes("天橋立")) searchCity = "Miyazu"; // 宮津市
+            else if (locName.includes("城崎")) searchCity = "Toyooka"; 
+            else if (locName.includes("伊根") || locName.includes("天橋立")) searchCity = "Miyazu"; 
 
-            if (cityLabel) cityLabel.innerText = searchCity.toUpperCase();
+            // 先把畫面上城市標籤更新成即將搜尋的城市（不必等 API）
+            if (label) label.innerText = searchCity.toUpperCase();
 
             try {
+                // 🌟 2. 執行 API 抓取
                 const url = `https://api.openweathermap.org/data/2.5/forecast?q=${searchCity}&units=metric&appid=${WEATHER_API_KEY}`;
                 const res = await fetch(url);
-                const data = await res.json();
+                const data = await res.json(); // 這裡才正式定義 data
 
-                if (data.cod === "200") {
-                    // 更新主溫度與體感
-                    tempEl.innerText = `${Math.round(data.list[0].main.temp)}°`;
-                    document.getElementById('feels-like').innerText = `體感 ${Math.round(data.list[0].main.feels_like)}°`;
+                if (data && data.cod === "200") {
+                    const currentData = data.list[0];
+
+                    // 🌟 3. 更新主溫度與體感 (加上安全檢查，避免 ID 寫錯噴紅字)
+                    if (tempEl) tempEl.innerText = `${Math.round(currentData.main.temp)}°`;
+                    if (feelsLikeEl) feelsLikeEl.innerText = `體感 ${Math.round(currentData.main.feels_like)}°`;
                     
-                    // 更新主天氣圖示
-                    updateMainWeatherIcon(data.list[0].weather[0].main);
+                    // 4. 更新主天氣圖示
+                    if (typeof updateMainWeatherIcon === "function") {
+                        updateMainWeatherIcon(currentData.weather[0].main);
+                    }
 
-                    // 更新降雨機率 (OpenWeatherMap 的 5天預報中有 pop 欄位)
-                    const rainChance = (data.list[0].pop * 100).toFixed(0);
-                    document.getElementById('rain-chance').innerHTML = `<i class="fas fa-umbrella mr-1"></i>${rainChance}%`;
+                    // 5. 更新降雨機率
+                    if (rainEl) {
+                        const rainChance = (currentData.pop * 100).toFixed(0);
+                        rainEl.innerHTML = `<i class="fas fa-umbrella mr-1"></i>${rainChance}%`;
+                    }
 
-                    // 渲染每小時預報 (縮小寬度，讓它更好看)
-                    const hourlyContainer = document.getElementById('hourly-forecast');
+                    // 6. 渲染每小時預報
                     if (hourlyContainer) {
                         hourlyContainer.innerHTML = data.list.slice(0, 6).map(item => `
                             <div class="flex flex-col items-center min-w-[40px]">
                                 <p class="text-[9px] opacity-40">${new Date(item.dt * 1000).getHours()}h</p>
-                                <i class="${getWeatherIconClass(item.weather[0].main)} text-xs my-1 text-white/80"></i>
+                                <i class="${typeof getWeatherIconClass === "function" ? getWeatherIconClass(item.weather[0].main) : 'fas fa-cloud'} text-xs my-1 text-white/80"></i>
                                 <p class="text-[11px] font-bold">${Math.round(item.main.temp)}°</p>
                             </div>
                         `).join('');
                     }
+                    
+                    // 如果你想顯示 API 回傳的城市正式名稱
+                    if (label) label.innerText = data.city.name.toUpperCase();
                 }
             } catch (e) {
-                tempEl.innerText = "--°";
-                console.error("天氣讀取失敗");
+                if (tempEl) tempEl.innerText = "--°";
+                console.error("天氣讀取失敗:", e);
             }
         }
 
